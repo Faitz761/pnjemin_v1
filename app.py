@@ -923,44 +923,17 @@ def admin_laporan():
     return render_template('admin/laporan.html', laporan=laporan)
 
 @app.route('/admin/selesaikan_laporan/<int:id>', methods=['POST'])
-def selesaikan_laporan(id):
-    if session.get('role') != 'admin':
-        return redirect(url_for('login'))
-        
-    keputusan_awal = request.form.get('keputusan')
-    catatan = request.form.get('catatan', '')
-    
-    # Gabungkan keputusan dengan catatan kalau ada
-    keputusan_final = f"{keputusan_awal}. Catatan: {catatan}" if catatan else keputusan_awal
-    
+def admin_selesaikan_laporan(id):
+    if session.get('role') != 'admin': return redirect(url_for('admin_login'))
+    keputusan = request.form['keputusan']
     conn = get_db()
-    
-    # 1. Update status laporan
-    # Kita butuh id_pelapor dan id_transaksi untuk kirim notif
-    laporan = conn.execute("SELECT * FROM laporan WHERE id=?", (id,)).fetchone()
-    
-    if laporan:
-        # Update laporan
-        conn.execute("UPDATE laporan SET status='selesai', keputusan=? WHERE id=?", 
-                     (keputusan_final, id))
-        
-        # 2. Ambil data transaksi untuk tahu siapa peminjamnya
-        transaksi = conn.execute("SELECT id_user, id_barang FROM transaksi WHERE id=?", 
-                                 (laporan['id_transaksi'],)).fetchone()
-        
-        if transaksi:
-            # Kirim notif ke Pemilik (Pelapor)
-            add_notif(laporan['id_pelapor'], f"Laporan denda #{id} telah diputuskan: {keputusan_awal}")
-            
-            # Kirim notif ke Peminjam (Terlapor)
-            add_notif(transaksi['id_user'], f"Admin telah memberikan keputusan denda pada transaksi #{laporan['id_transaksi']}: {keputusan_awal}")
-        
-        conn.commit()
-        flash('Keputusan berhasil dikirim!', 'success')
-    else:
-        flash('Laporan tidak ditemukan.', 'error')
-        
-    return redirect(url_for('admin_laporan')) # Pastikan nama function route laporan admin kamu adalah admin_laporan
+    l = conn.execute("SELECT l.*,t.id_user,b.nama_barang,b.id_pemilik FROM laporan l JOIN transaksi t ON l.id_transaksi=t.id JOIN barang b ON t.id_barang=b.id WHERE l.id=?",(id,)).fetchone()
+    conn.execute("UPDATE laporan SET status='selesai',keputusan=? WHERE id=?",(keputusan,id))
+    add_notif(l['id_user'],f"Laporan denda '{l['nama_barang']}' diputuskan: {keputusan}")
+    add_notif(l['id_pemilik'],f"Laporan denda '{l['nama_barang']}' diputuskan: {keputusan}")
+    conn.commit()
+    flash('Laporan diselesaikan!','success')
+    return redirect(url_for('admin_laporan'))
 
 @app.route('/admin/banding')
 def admin_banding():
